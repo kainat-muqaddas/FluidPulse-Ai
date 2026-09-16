@@ -148,8 +148,8 @@ if predict_btn:
             y_min, y_max = -1.5, 1.5
             use_fast_kdtree = False
         elif case == "Backward Facing Step":
-            x_min, x_max = -1.0, 8.0
-            y_min, y_max = -0.5, 1.5
+            x_min, x_max = 0.00, 0.12
+            y_min, y_max = -0.005, 0.005
             use_fast_kdtree = True  # Enable ultra-fast caching lookup
         elif case == "NACA0012":
             x_min, x_max = -0.5, 1.8
