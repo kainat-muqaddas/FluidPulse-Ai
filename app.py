@@ -218,7 +218,7 @@ if predict_btn:
                         y0=-0.5,
                         x1=0.5,
                         y1=0.5,
-                        fillcolor="black",
+                        fillcolor="white",
                         line=dict(color="red", width=2),
                     )
                 )
@@ -227,7 +227,7 @@ if predict_btn:
                     dict(
                         type="path",
                         path=generate_naca0012_path(alpha_deg=param),
-                        fillcolor="black",
+                        fillcolor="white",
                         line=dict(color="red", width=2),
                     )
                 )
@@ -275,30 +275,30 @@ if predict_btn:
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.subheader("Absolute Pressure")
-                fig_p = create_flow_figure(grid_p, colorscale="Turbo", height=450)
+                fig_p = create_flow_figure(grid_p, colorscale="jet", height=450)
                 st.plotly_chart(fig_p, use_container_width=True, config=plotly_config)
             with col2:
                 st.subheader("U Velocity")
-                fig_u = create_flow_figure(grid_u, colorscale="Turbo", height=450)
+                fig_u = create_flow_figure(grid_u, colorscale="jet", height=450)
                 st.plotly_chart(fig_u, use_container_width=True, config=plotly_config)
             with col3:
                 st.subheader("V Velocity")
-                fig_v = create_flow_figure(grid_v, colorscale="Turbo", height=450)
+                fig_v = create_flow_figure(grid_v, colorscale="jet", height=450)
                 st.plotly_chart(fig_v, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "Absolute Pressure":
             st.subheader("Absolute Pressure")
-            fig_p = create_flow_figure(grid_p, colorscale="Turbo", height=650)
+            fig_p = create_flow_figure(grid_p, colorscale="jet", height=650)
             st.plotly_chart(fig_p, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "U Velocity":
             st.subheader("U Velocity")
-            fig_u = create_flow_figure(grid_u, colorscale="Turbo", height=650)
+            fig_u = create_flow_figure(grid_u, colorscale="jet", height=650)
             st.plotly_chart(fig_u, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "V Velocity":
             st.subheader("V Velocity")
-            fig_v = create_flow_figure(grid_v, colorscale="Turbo", height=650)
+            fig_v = create_flow_figure(grid_v, colorscale="jet", height=650)
             st.plotly_chart(fig_v, use_container_width=True, config=plotly_config)
 
     except Exception as e:
