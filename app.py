@@ -234,8 +234,13 @@ if predict_btn:
             elif case == "Backward Facing Step":
                 shapes.append(
                     dict(
-                        type="path",
-                        path="M 0.00,-0.005 L 0.04,0.000 L 0.00,0.000 Z",
+                        type="rect",
+                       xref="x",
+                        yref="y",
+                        x0=-1.0,
+                        y0=-0.5,
+                        x1=0.0,
+                        y1=0.0,
                         fillcolor="white",
                         line=dict(color="black", width=1),
                     )
