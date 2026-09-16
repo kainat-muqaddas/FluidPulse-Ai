@@ -219,7 +219,7 @@ if predict_btn:
                         x1=0.5,
                         y1=0.5,
                         fillcolor="black",
-                        line=dict(color="red", width=1.5),
+                        line=dict(color="red", width=2),
                     )
                 )
             elif case == "NACA0012":
@@ -228,7 +228,7 @@ if predict_btn:
                         type="path",
                         path=generate_naca0012_path(alpha_deg=param),
                         fillcolor="black",
-                        line=dict(color="red", width=1.5),
+                        line=dict(color="red", width=2),
                     )
                 )
             elif case == "Backward Facing Step":
@@ -242,7 +242,7 @@ if predict_btn:
                         x1=0.0,
                         y1=0.0,
                         fillcolor="white",
-                        line=dict(color="black", width=1),
+                        line=dict(color="black", width=2),
                     )
                 )
 
