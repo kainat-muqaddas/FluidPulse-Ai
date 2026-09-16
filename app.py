@@ -94,7 +94,7 @@ def get_model(case_name):
 
 # CACHED KDTREE MESH INTERPOLATOR FOR ULTRA-FAST RENDER
 @st.cache_data
-def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=220):
+def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=180):
     grid_x_1d = np.linspace(x_min, x_max, res)
     grid_y_1d = np.linspace(y_min, y_max, res)
     grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
@@ -163,13 +163,13 @@ if predict_btn:
         if use_fast_kdtree:
             # INSTANT RE-INDEXING VIA KD-TREE
             grid_x_1d, grid_y_1d, indices, grid_shape = get_fast_grid_indices(
-                x_coords, y_coords, x_min, x_max, y_min, y_max, res=220
+                x_coords, y_coords, x_min, x_max, y_min, y_max, res=180
             )
             grid_p = p[indices].reshape(grid_shape)
             grid_u = u[indices].reshape(grid_shape)
             grid_v = v[indices].reshape(grid_shape)
         else:
-            # STANDARD CUBIC INTERPOLATION
+            # STANDARD CUBIC INTERPOLATION FOR ACCURATE CURVED GEOMETRIES
             grid_x_1d = np.linspace(x_min, x_max, 280)
             grid_y_1d = np.linspace(y_min, y_max, 280)
             grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
@@ -186,28 +186,17 @@ if predict_btn:
 
         st.success(f"Prediction completed for {case}")
 
-        # HIGH-CONTRAST FLOW FIELD PLOTTING FUNCTION
-        def create_flow_figure(z_data, colorscale="Jet", height=480):
-            # Dynamic min/max calculation to stretch full spectrum across colorscale
-            valid_z = z_data[~np.isnan(z_data)] if np.any(np.isnan(z_data)) else z_data
-            z_min = float(np.min(valid_z))
-            z_max = float(np.max(valid_z))
-
+        def create_flow_figure(z_data, colorscale="Turbo", height=480):
             fig = go.Figure(
                 data=go.Contour(
                     x=grid_x_1d,
                     y=grid_y_1d,
                     z=z_data,
                     colorscale=colorscale,
-                    cmin=z_min,
-                    cmax=z_max,
-                    line_smoothing=1.3,
+                    line_smoothing=1.1,
                     contours=dict(
                         coloring="heatmap",
                         showlines=False,
-                        start=z_min,
-                        end=z_max,
-                        size=(z_max - z_min) / 100 if z_max != z_min else 0.1,
                     ),
                     line=dict(width=0),
                     colorbar=dict(
@@ -243,25 +232,14 @@ if predict_btn:
                     )
                 )
             elif case == "Backward Facing Step":
-                # Sloped bottom channel obstacle polygon matching CFD domain
                 shapes.append(
                     dict(
                         type="path",
                         path="M 0.00,-0.005 L 0.04,0.000 L 0.00,0.000 Z",
                         fillcolor="white",
-                        line=dict(color="black", width=1.5),
+                        line=dict(color="black", width=1),
                     )
                 )
-
-            # Adjust aspect ratio for wide channel view on BFS
-            aspect_ratio_setting = dict(
-                title="y",
-                range=[y_min, y_max],
-                showgrid=False,
-                zeroline=False,
-            )
-            if case != "Backward Facing Step":
-                aspect_ratio_setting.update(dict(scaleanchor="x", scaleratio=1, constrain="domain"))
 
             fig.update_layout(
                 xaxis=dict(
@@ -271,7 +249,15 @@ if predict_btn:
                     zeroline=False,
                     constrain="domain",
                 ),
-                yaxis=aspect_ratio_setting,
+                yaxis=dict(
+                    title="y",
+                    range=[y_min, y_max],
+                    scaleanchor="x",
+                    scaleratio=1,
+                    showgrid=False,
+                    zeroline=False,
+                    constrain="domain",
+                ),
                 shapes=shapes,
                 margin=dict(l=15, r=15, t=15, b=15),
                 height=height,
@@ -284,30 +270,30 @@ if predict_btn:
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.subheader("Absolute Pressure")
-                fig_p = create_flow_figure(grid_p, colorscale="Jet", height=450)
+                fig_p = create_flow_figure(grid_p, colorscale="Turbo", height=450)
                 st.plotly_chart(fig_p, use_container_width=True, config=plotly_config)
             with col2:
                 st.subheader("U Velocity")
-                fig_u = create_flow_figure(grid_u, colorscale="Jet", height=450)
+                fig_u = create_flow_figure(grid_u, colorscale="Turbo", height=450)
                 st.plotly_chart(fig_u, use_container_width=True, config=plotly_config)
             with col3:
                 st.subheader("V Velocity")
-                fig_v = create_flow_figure(grid_v, colorscale="Jet", height=450)
+                fig_v = create_flow_figure(grid_v, colorscale="Turbo", height=450)
                 st.plotly_chart(fig_v, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "Absolute Pressure":
             st.subheader("Absolute Pressure")
-            fig_p = create_flow_figure(grid_p, colorscale="Jet", height=650)
+            fig_p = create_flow_figure(grid_p, colorscale="Turbo", height=650)
             st.plotly_chart(fig_p, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "U Velocity":
             st.subheader("U Velocity")
-            fig_u = create_flow_figure(grid_u, colorscale="Jet", height=650)
+            fig_u = create_flow_figure(grid_u, colorscale="Turbo", height=650)
             st.plotly_chart(fig_u, use_container_width=True, config=plotly_config)
 
         elif selected_variable == "V Velocity":
             st.subheader("V Velocity")
-            fig_v = create_flow_figure(grid_v, colorscale="Jet", height=650)
+            fig_v = create_flow_figure(grid_v, colorscale="Turbo", height=650)
             st.plotly_chart(fig_v, use_container_width=True, config=plotly_config)
 
     except Exception as e:
