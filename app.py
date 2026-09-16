@@ -29,10 +29,12 @@ Rapid CFD surrogate modeling powered by POD-FCDNN neural architectures. Real-tim
 with st.sidebar:
     st.header("Control Panel")
 
+    # CASE SELECTION
     case = st.selectbox(
         "Select Case", ["Cavity", "Cylinder", "Backward Facing Step", "NACA0012"]
     )
 
+    # PARAMETER INPUT
     if case == "NACA0012":
         param = st.slider(
             "Angle of Attack (α)",
@@ -46,15 +48,18 @@ with st.sidebar:
             "Reynolds Number", min_value=100, max_value=10000, value=1000, step=100
         )
 
+    # VARIABLE SELECTION
     selected_variable = st.radio(
         "Select Flow Variable",
         ["All Variables", "Absolute Pressure", "U Velocity", "V Velocity"],
         index=0,
     )
 
+    # PREDICT BUTTON
     predict_btn = st.button("Predict Flow Field", use_container_width=True)
 
 
+# LOAD CHECKPOINT WITH CACHING FOR MAXIMUM SPEED
 @st.cache_resource
 def get_model(case_name):
     checkpoint_filenames = {
@@ -87,12 +92,14 @@ def get_model(case_name):
     return load_checkpoint(target_path)
 
 
+# CACHED KDTREE MESH INTERPOLATOR FOR ULTRA-FAST RENDER
 @st.cache_data
-def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=220):
+def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=180):
     grid_x_1d = np.linspace(x_min, x_max, res)
     grid_y_1d = np.linspace(y_min, y_max, res)
     grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
     
+    # Build spatial KD-Tree for instant lookup
     points = np.column_stack((x_coords, y_coords))
     tree = cKDTree(points)
     
@@ -103,6 +110,7 @@ def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=22
 
 
 def generate_naca0012_path(c=1.0, alpha_deg=0.0, num_points=100):
+    """Generates a Plotly SVG path string for a NACA 0012 airfoil rotated by Angle of Attack (alpha)."""
     x = np.linspace(0, c, num_points)
     yt = 5 * 0.12 * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
     
@@ -121,6 +129,7 @@ def generate_naca0012_path(c=1.0, alpha_deg=0.0, num_points=100):
     return path_str
 
 
+# MAIN DASHBOARD AREA
 if predict_btn:
     try:
         trainer = get_model(case)
@@ -139,9 +148,9 @@ if predict_btn:
             y_min, y_max = -1.5, 1.5
             use_fast_kdtree = False
         elif case == "Backward Facing Step":
-            x_min, x_max = 0.00, 0.12
-            y_min, y_max = -0.005, 0.005
-            use_fast_kdtree = True
+            x_min, x_max = -1.0, 8.0
+            y_min, y_max = -0.5, 1.5
+            use_fast_kdtree = True  # Enable ultra-fast caching lookup
         elif case == "NACA0012":
             x_min, x_max = -0.5, 1.8
             y_min, y_max = -0.8, 0.8
@@ -152,13 +161,15 @@ if predict_btn:
             use_fast_kdtree = False
 
         if use_fast_kdtree:
+            # INSTANT RE-INDEXING VIA KD-TREE
             grid_x_1d, grid_y_1d, indices, grid_shape = get_fast_grid_indices(
-                x_coords, y_coords, x_min, x_max, y_min, y_max, res=220
+                x_coords, y_coords, x_min, x_max, y_min, y_max, res=180
             )
             grid_p = p[indices].reshape(grid_shape)
             grid_u = u[indices].reshape(grid_shape)
             grid_v = v[indices].reshape(grid_shape)
         else:
+            # STANDARD CUBIC INTERPOLATION FOR ACCURATE CURVED GEOMETRIES
             grid_x_1d = np.linspace(x_min, x_max, 280)
             grid_y_1d = np.linspace(y_min, y_max, 280)
             grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
@@ -175,22 +186,14 @@ if predict_btn:
 
         st.success(f"Prediction completed for {case}")
 
-        # FUNCTION FOR HIGH-CONTRAST FLOW COLORS
         def create_flow_figure(z_data, colorscale="Turbo", height=480):
-            # Mask out NaN points to compute clear dynamic color range
-            valid_z = z_data[~np.isnan(z_data)] if np.any(np.isnan(z_data)) else z_data
-            z_min = float(np.min(valid_z))
-            z_max = float(np.max(valid_z))
-
             fig = go.Figure(
                 data=go.Contour(
                     x=grid_x_1d,
                     y=grid_y_1d,
                     z=z_data,
-                    colorscale=colorscale,  # Highly visible color palette
-                    cmin=z_min,
-                    cmax=z_max,
-                    line_smoothing=1.3,
+                    colorscale=colorscale,
+                    line_smoothing=1.1,
                     contours=dict(
                         coloring="heatmap",
                         showlines=False,
@@ -205,7 +208,6 @@ if predict_btn:
             )
 
             shapes = []
-            # GEOMETRY OVERLAYS WITH DISTINCT SOLID MASKING
             if case == "Cylinder":
                 shapes.append(
                     dict(
@@ -217,7 +219,7 @@ if predict_btn:
                         x1=0.5,
                         y1=0.5,
                         fillcolor="black",
-                        line=dict(color="red", width=2),
+                        line=dict(color="red", width=1.5),
                     )
                 )
             elif case == "NACA0012":
@@ -226,27 +228,23 @@ if predict_btn:
                         type="path",
                         path=generate_naca0012_path(alpha_deg=param),
                         fillcolor="black",
-                        line=dict(color="red", width=2),
+                        line=dict(color="red", width=1.5),
                     )
                 )
             elif case == "Backward Facing Step":
                 shapes.append(
                     dict(
-                        type="path",
-                        path="M 0.00,-0.005 L 0.04,0.000 L 0.00,0.000 Z",
+                        type="rect",
+                        xref="x",
+                        yref="y",
+                        x0=-1.0,
+                        y0=-0.5,
+                        x1=0.0,
+                        y1=0.0,
                         fillcolor="black",
-                        line=dict(color="red", width=2),
+                        line=dict(color="red", width=1.5),
                     )
                 )
-
-            aspect_ratio_setting = dict(
-                title="y",
-                range=[y_min, y_max],
-                showgrid=False,
-                zeroline=False,
-            )
-            if case != "Backward Facing Step":
-                aspect_ratio_setting.update(dict(scaleanchor="x", scaleratio=1, constrain="domain"))
 
             fig.update_layout(
                 xaxis=dict(
@@ -256,7 +254,15 @@ if predict_btn:
                     zeroline=False,
                     constrain="domain",
                 ),
-                yaxis=aspect_ratio_setting,
+                yaxis=dict(
+                    title="y",
+                    range=[y_min, y_max],
+                    scaleanchor="x",
+                    scaleratio=1,
+                    showgrid=False,
+                    zeroline=False,
+                    constrain="domain",
+                ),
                 shapes=shapes,
                 margin=dict(l=15, r=15, t=15, b=15),
                 height=height,
