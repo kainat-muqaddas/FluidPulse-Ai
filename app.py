@@ -133,25 +133,33 @@ if predict_btn:
         if case == "Cylinder":
             x_min, x_max = -1.0, 5.0
             y_min, y_max = -1.5, 1.5
+            grid_res = 300
+            interp_method = "cubic"
         elif case == "Backward Facing Step":
             x_min, x_max = -1.0, 8.0
             y_min, y_max = -0.5, 1.5
+            grid_res = 200  # Lower resolution for fast rendering on large domain
+            interp_method = "linear"  # Fast linear interpolation
         elif case == "NACA0012":
             x_min, x_max = -0.5, 1.8
             y_min, y_max = -0.8, 0.8
+            grid_res = 300
+            interp_method = "cubic"
         else:
             x_min, x_max = x_coords.min(), x_coords.max()
             y_min, y_max = y_coords.min(), y_coords.max()
+            grid_res = 300
+            interp_method = "cubic"
 
-        # Interpolate spatial points onto a dense regular grid for high-resolution rendering
-        grid_x_1d = np.linspace(x_min, x_max, 350)
-        grid_y_1d = np.linspace(y_min, y_max, 350)
+        # Interpolate spatial points onto grid
+        grid_x_1d = np.linspace(x_min, x_max, grid_res)
+        grid_y_1d = np.linspace(y_min, y_max, grid_res)
         grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
 
-        # Interpolate 1D spatial mesh onto 2D grid first
-        grid_p = griddata((x_coords, y_coords), p, (grid_x, grid_y), method="cubic")
-        grid_u = griddata((x_coords, y_coords), u, (grid_x, grid_y), method="cubic")
-        grid_v = griddata((x_coords, y_coords), v, (grid_x, grid_y), method="cubic")
+        # Fast Interpolation
+        grid_p = griddata((x_coords, y_coords), p, (grid_x, grid_y), method=interp_method)
+        grid_u = griddata((x_coords, y_coords), u, (grid_x, grid_y), method=interp_method)
+        grid_v = griddata((x_coords, y_coords), v, (grid_x, grid_y), method=interp_method)
 
         # Apply cylinder domain mask directly to the 2D interpolated grid
         if case == "Cylinder":
