@@ -6,6 +6,7 @@ import os
 import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
 import streamlit as st
 from engine import load_checkpoint, predict_and_reconstruct
 
@@ -71,7 +72,6 @@ def get_model(case_name):
     filename = checkpoint_filenames[case_name]
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Check potential path locations
     possible_paths = [
         os.path.join(base_dir, "checkpoints", filename),
         os.path.join(base_dir, filename),
@@ -92,22 +92,36 @@ def get_model(case_name):
     return load_checkpoint(target_path)
 
 
+# CACHED KDTREE MESH INTERPOLATOR FOR ULTRA-FAST RENDER
+@st.cache_data
+def get_fast_grid_indices(x_coords, y_coords, x_min, x_max, y_min, y_max, res=180):
+    grid_x_1d = np.linspace(x_min, x_max, res)
+    grid_y_1d = np.linspace(y_min, y_max, res)
+    grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
+    
+    # Build spatial KD-Tree for instant lookup
+    points = np.column_stack((x_coords, y_coords))
+    tree = cKDTree(points)
+    
+    grid_points = np.column_stack((grid_x.ravel(), grid_y.ravel()))
+    _, indices = tree.query(grid_points)
+    
+    return grid_x_1d, grid_y_1d, indices, grid_x.shape
+
+
 def generate_naca0012_path(c=1.0, alpha_deg=0.0, num_points=100):
     """Generates a Plotly SVG path string for a NACA 0012 airfoil rotated by Angle of Attack (alpha)."""
     x = np.linspace(0, c, num_points)
     yt = 5 * 0.12 * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
     
-    # Upper and lower surface points
     x_coords = np.concatenate([x, x[::-1]])
     y_coords = np.concatenate([yt, -yt[::-1]])
     
-    # Rotate geometry according to Angle of Attack (alpha)
-    rad = np.radians(-alpha_deg)  # Pitch up / nose up orientation
+    rad = np.radians(-alpha_deg)
     cos_a, sin_a = np.cos(rad), np.sin(rad)
     x_rot = x_coords * cos_a - y_coords * sin_a
     y_rot = x_coords * sin_a + y_coords * cos_a
 
-    # Construct SVG path string for Plotly layout shapes
     path_str = f"M {x_rot[0]},{y_rot[0]}"
     for xv, yv in zip(x_rot[1:], y_rot[1:]):
         path_str += f" L {xv},{yv}"
@@ -129,48 +143,49 @@ if predict_btn:
         x_coords = xy[:, 0]
         y_coords = xy[:, 1]
 
-        # AUTO-ZOOM & CROP LIMITS SPECIFIC TO GEOMETRY REGIONS OF INTEREST
         if case == "Cylinder":
             x_min, x_max = -1.0, 5.0
             y_min, y_max = -1.5, 1.5
-            grid_res = 300
-            interp_method = "cubic"
+            use_fast_kdtree = False
         elif case == "Backward Facing Step":
             x_min, x_max = -1.0, 8.0
             y_min, y_max = -0.5, 1.5
-            grid_res = 200  # Lower resolution for fast rendering on large domain
-            interp_method = "linear"  # Fast linear interpolation
+            use_fast_kdtree = True  # Enable ultra-fast caching lookup
         elif case == "NACA0012":
             x_min, x_max = -0.5, 1.8
             y_min, y_max = -0.8, 0.8
-            grid_res = 300
-            interp_method = "cubic"
+            use_fast_kdtree = False
         else:
             x_min, x_max = x_coords.min(), x_coords.max()
             y_min, y_max = y_coords.min(), y_coords.max()
-            grid_res = 300
-            interp_method = "cubic"
+            use_fast_kdtree = False
 
-        # Interpolate spatial points onto grid
-        grid_x_1d = np.linspace(x_min, x_max, grid_res)
-        grid_y_1d = np.linspace(y_min, y_max, grid_res)
-        grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
+        if use_fast_kdtree:
+            # INSTANT RE-INDEXING VIA KD-TREE
+            grid_x_1d, grid_y_1d, indices, grid_shape = get_fast_grid_indices(
+                x_coords, y_coords, x_min, x_max, y_min, y_max, res=180
+            )
+            grid_p = p[indices].reshape(grid_shape)
+            grid_u = u[indices].reshape(grid_shape)
+            grid_v = v[indices].reshape(grid_shape)
+        else:
+            # STANDARD CUBIC INTERPOLATION FOR ACCURATE CURVED GEOMETRIES
+            grid_x_1d = np.linspace(x_min, x_max, 280)
+            grid_y_1d = np.linspace(y_min, y_max, 280)
+            grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
 
-        # Fast Interpolation
-        grid_p = griddata((x_coords, y_coords), p, (grid_x, grid_y), method=interp_method)
-        grid_u = griddata((x_coords, y_coords), u, (grid_x, grid_y), method=interp_method)
-        grid_v = griddata((x_coords, y_coords), v, (grid_x, grid_y), method=interp_method)
+            grid_p = griddata((x_coords, y_coords), p, (grid_x, grid_y), method="cubic")
+            grid_u = griddata((x_coords, y_coords), u, (grid_x, grid_y), method="cubic")
+            grid_v = griddata((x_coords, y_coords), v, (grid_x, grid_y), method="cubic")
 
-        # Apply cylinder domain mask directly to the 2D interpolated grid
-        if case == "Cylinder":
-            inside_cylinder = (grid_x**2 + grid_y**2) < (0.5**2)
-            grid_p[inside_cylinder] = np.nan
-            grid_u[inside_cylinder] = np.nan
-            grid_v[inside_cylinder] = np.nan
+            if case == "Cylinder":
+                inside_cylinder = (grid_x**2 + grid_y**2) < (0.5**2)
+                grid_p[inside_cylinder] = np.nan
+                grid_u[inside_cylinder] = np.nan
+                grid_v[inside_cylinder] = np.nan
 
         st.success(f"Prediction completed for {case}")
 
-        # CLEAN, HIGH-CONTRAST ZOOMED FLOW FIELD PLOTTING FUNCTION
         def create_flow_figure(z_data, colorscale="Turbo", height=480):
             fig = go.Figure(
                 data=go.Contour(
@@ -178,7 +193,7 @@ if predict_btn:
                     y=grid_y_1d,
                     z=z_data,
                     colorscale=colorscale,
-                    line_smoothing=1.3,
+                    line_smoothing=1.1,
                     contours=dict(
                         coloring="heatmap",
                         showlines=False,
@@ -193,7 +208,6 @@ if predict_btn:
             )
 
             shapes = []
-            # GEOMETRY OVERLAYS
             if case == "Cylinder":
                 shapes.append(
                     dict(
@@ -257,7 +271,6 @@ if predict_btn:
 
         plotly_config = {"displayModeBar": False}
 
-        # RENDER BASED ON VARIABLE SELECTION
         if selected_variable == "All Variables":
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -294,3 +307,4 @@ else:
     st.info(
         "Select parameters on the left sidebar and click **Predict Flow Field** to run the simulation."
     )
+    
