@@ -235,14 +235,14 @@ if predict_btn:
                 shapes.append(
                     dict(
                         type="path",
-                       xref="x",
-                        yref="y",
-                        x0=-1.0,
-                        y0=-0.5,
-                        x1=0.0,
-                        y1=0.0,
-                        fillcolor="white",
-                        line=dict(color="black", width=2),
+                        # Closed polygon representing the step/sloped block boundary
+                        path="M 0.00,-0.005 L 0.04,0.000 L 0.00,0.000 Z",
+                        fillcolor="black",       # Solid black fill to completely mask background
+                        line=dict(
+                            color="red",        # High-contrast red border (matches cylinder & NACA)
+                            width=2
+                        ),
+                        layer="above",          # Forces overlay on top of contour heatmap
                     )
                 )
 
