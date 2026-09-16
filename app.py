@@ -92,8 +92,8 @@ def get_model(case_name):
     return load_checkpoint(target_path)
 
 
-def generate_naca0012_path(c=1.0, num_points=100):
-    """Generates a Plotly SVG path string for a NACA 0012 airfoil profile."""
+def generate_naca0012_path(c=1.0, alpha_deg=0.0, num_points=100):
+    """Generates a Plotly SVG path string for a NACA 0012 airfoil rotated by Angle of Attack (alpha)."""
     x = np.linspace(0, c, num_points)
     yt = 5 * 0.12 * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
     
@@ -101,10 +101,16 @@ def generate_naca0012_path(c=1.0, num_points=100):
     x_coords = np.concatenate([x, x[::-1]])
     y_coords = np.concatenate([yt, -yt[::-1]])
     
+    # Rotate geometry according to Angle of Attack (alpha)
+    rad = np.radians(-alpha_deg)  # Pitch up / nose up orientation
+    cos_a, sin_a = np.cos(rad), np.sin(rad)
+    x_rot = x_coords * cos_a - y_coords * sin_a
+    y_rot = x_coords * sin_a + y_coords * cos_a
+
     # Construct SVG path string for Plotly layout shapes
-    path_str = f"M {x_coords[0]},{y_coords[0]}"
-    for x_val, y_val in zip(x_coords[1:], y_coords[1:]):
-        path_str += f" L {x_val},{y_val}"
+    path_str = f"M {x_rot[0]},{y_rot[0]}"
+    for xv, yv in zip(x_rot[1:], y_rot[1:]):
+        path_str += f" L {xv},{yv}"
     path_str += " Z"
     return path_str
 
@@ -125,19 +131,15 @@ if predict_btn:
 
         # AUTO-ZOOM & CROP LIMITS SPECIFIC TO GEOMETRY REGIONS OF INTEREST
         if case == "Cylinder":
-            # Focus on wake shedding region behind cylinder
             x_min, x_max = -1.0, 5.0
             y_min, y_max = -1.5, 1.5
         elif case == "Backward Facing Step":
-            # Focus on recirculation zone behind the step
             x_min, x_max = -1.0, 8.0
             y_min, y_max = -0.5, 1.5
         elif case == "NACA0012":
-            # Focus tightly around the airfoil geometry
             x_min, x_max = -0.5, 1.8
             y_min, y_max = -0.8, 0.8
         else:
-            # Default tight spatial bounds (e.g., Cavity)
             x_min, x_max = x_coords.min(), x_coords.max()
             y_min, y_max = y_coords.min(), y_coords.max()
 
@@ -146,18 +148,17 @@ if predict_btn:
         grid_y_1d = np.linspace(y_min, y_max, 350)
         grid_x, grid_y = np.meshgrid(grid_x_1d, grid_y_1d)
 
-        # Mask points inside the cylinder domain (center 0,0 with radius 0.5)
+        # Interpolate 1D spatial mesh onto 2D grid first
+        grid_p = griddata((x_coords, y_coords), p, (grid_x, grid_y), method="cubic")
+        grid_u = griddata((x_coords, y_coords), u, (grid_x, grid_y), method="cubic")
+        grid_v = griddata((x_coords, y_coords), v, (grid_x, grid_y), method="cubic")
+
+        # Apply cylinder domain mask directly to the 2D interpolated grid
         if case == "Cylinder":
             inside_cylinder = (grid_x**2 + grid_y**2) < (0.5**2)
-            p_masked = np.where(inside_cylinder, np.nan, p)
-            u_masked = np.where(inside_cylinder, np.nan, u)
-            v_masked = np.where(inside_cylinder, np.nan, v)
-        else:
-            p_masked, u_masked, v_masked = p, u, v
-
-        grid_p = griddata((x_coords, y_coords), p_masked, (grid_x, grid_y), method="cubic")
-        grid_u = griddata((x_coords, y_coords), u_masked, (grid_x, grid_y), method="cubic")
-        grid_v = griddata((x_coords, y_coords), v_masked, (grid_x, grid_y), method="cubic")
+            grid_p[inside_cylinder] = np.nan
+            grid_u[inside_cylinder] = np.nan
+            grid_v[inside_cylinder] = np.nan
 
         st.success(f"Prediction completed for {case}")
 
@@ -172,7 +173,7 @@ if predict_btn:
                     line_smoothing=1.3,
                     contours=dict(
                         coloring="heatmap",
-                        showlines=False,  # Completely removes contour isolines
+                        showlines=False,
                     ),
                     line=dict(width=0),
                     colorbar=dict(
@@ -203,7 +204,7 @@ if predict_btn:
                 shapes.append(
                     dict(
                         type="path",
-                        path=generate_naca0012_path(),
+                        path=generate_naca0012_path(alpha_deg=param),
                         fillcolor="black",
                         line=dict(color="red", width=1.5),
                     )
