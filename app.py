@@ -234,7 +234,7 @@ if predict_btn:
             elif case == "Backward Facing Step":
                 shapes.append(
                     dict(
-                        type="rect",
+                        type="path",
                        xref="x",
                         yref="y",
                         x0=-1.0,
